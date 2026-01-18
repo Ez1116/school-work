@@ -976,6 +976,13 @@
       <button class="settings-btn" onclick="openSettings()">⚙️</button>
     </div>
     <div class="card">
+      <div class="card-title">查詢單字</div>
+      <div class="search-container">
+        <span class="search-icon">🔍</span>
+        <input type="text" class="search-input" id="examSearchInput" placeholder="輸入英文或中文，按 Enter 搜尋...">
+      </div>
+    </div>
+    <div class="card">
       <div class="card-title">選擇級別</div>
       <div class="level-selector" id="levelSelector">
         <button class="level-btn" data-level="1">1</button>
@@ -1340,6 +1347,52 @@
         selectLevel(level);
       });
     });
+
+    // 大考單字搜尋
+    async function handleExamSearch(event) {
+      if (event.key !== 'Enter') return;
+
+      const keyword = event.target.value.trim();
+      if (!keyword) return;
+
+      if (!apiUrl) {
+        showToast('請先設定 API URL');
+        openSettings();
+        return;
+      }
+
+      showToast('搜尋中...');
+
+      try {
+        const result = await apiGet('searchVocab', { keyword: keyword });
+
+        if (result.success && result.found) {
+          const word = result.word;
+          const level = word.level.toString();
+
+          // 選擇對應級別（這會載入該級別的所有單字）
+          await selectLevel(level);
+
+          // 找到該單字在 examWords 中的索引
+          const index = examWords.findIndex(w => w.number === word.number);
+
+          if (index !== -1) {
+            // 計算頁碼並跳轉
+            currentPage = Math.floor(index / WORDS_PER_PAGE);
+            renderExamWords();
+            showToast(`找到「${word.word}」在第 ${level} 級，第 ${currentPage + 1} 頁`);
+          }
+        } else if (result.success && !result.found) {
+          showToast('找不到符合的單字');
+        } else {
+          showToast('搜尋失敗：' + result.error);
+        }
+      } catch (error) {
+        showToast('搜尋失敗，請稍後再試');
+      }
+    }
+
+    document.getElementById('examSearchInput').addEventListener('keyup', handleExamSearch);
 
     async function selectLevel(level) {
       // 更新按鈕狀態
