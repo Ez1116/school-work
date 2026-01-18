@@ -1079,6 +1079,7 @@
     let currentQuiz = null;
     let quizAnswered = false;
     let starredOptions = new Set(); // 追蹤已標記的選項
+    let recordedWords = new Set(); // 儲存已記錄的單字（小寫）
 
     // ============================================
     // API 請求函數
@@ -1121,6 +1122,19 @@
       } catch (e) {
         console.error('API 回應:', text);
         throw new Error('回應格式錯誤');
+      }
+    }
+
+    async function loadRecordedWords() {
+      if (!apiUrl) return;
+
+      try {
+        const result = await apiGet('getRecordedWords');
+        if (result.success) {
+          recordedWords = new Set(result.words);
+        }
+      } catch (error) {
+        console.error('載入已記錄單字失敗:', error);
       }
     }
 
@@ -1351,6 +1365,8 @@
       document.getElementById('examPagination').style.display = 'none';
 
       try {
+        // 同時載入單字和已記錄的單字清單
+        await loadRecordedWords();
         const result = await apiGet('getWordsByLevel', { level: level });
 
         if (result.success && result.words.length > 0) {
@@ -1370,7 +1386,10 @@
       const end = start + WORDS_PER_PAGE;
       const pageWords = examWords.slice(start, end);
 
-      const html = pageWords.map(word => `
+      const html = pageWords.map(word => {
+        // 判斷是否已標記：檢查已記錄清單或本次新標記
+        const isRecorded = recordedWords.has(word.word.toLowerCase()) || starredWords.has(word.number);
+        return `
         <div class="word-card">
           <div class="word-number">#${word.number}</div>
           <div class="word-content">
@@ -1378,12 +1397,12 @@
             <div class="word-pos">${escapeHtml(word.pos)}</div>
             <div class="word-chinese">${escapeHtml(word.chinese)}</div>
           </div>
-          <button class="star-btn ${starredWords.has(word.number) ? 'active' : ''}"
+          <button class="star-btn ${isRecorded ? 'active' : ''}"
                   onclick="toggleStar(${word.number}, '${escapeAttr(word.word)}', '${escapeAttr(word.pos)}', '${escapeAttr(word.chinese)}')">
             ⭐
           </button>
         </div>
-      `).join('');
+      `}).join('');
 
       document.getElementById('examContent').innerHTML = html;
       updatePagination();
@@ -1407,6 +1426,12 @@
     }
 
     async function toggleStar(number, word, pos, chinese) {
+      // 檢查是否已經在紀錄中
+      if (recordedWords.has(word.toLowerCase())) {
+        showToast('此單字已經標記過了');
+        return;
+      }
+
       if (starredWords.has(number)) {
         starredWords.delete(number);
         showToast('已取消標記');
@@ -1426,6 +1451,8 @@
           });
 
           if (result.success) {
+            // 同時更新本地的 recordedWords
+            recordedWords.add(word.toLowerCase());
             showToast('已標記並儲存');
           } else {
             showToast('儲存失敗');
@@ -1566,6 +1593,8 @@
       container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
 
       try {
+        // 載入已記錄的單字清單
+        await loadRecordedWords();
         const result = await apiGet('getRandomQuiz');
 
         if (result.success) {
@@ -1611,6 +1640,8 @@
         let classes = 'quiz-option';
         let content = escapeHtml(option.chinese);
         let starBtn = '';
+        // 判斷此選項是否已記錄
+        const isOptionRecorded = recordedWords.has(option.word.toLowerCase());
 
         if (option.isCorrect) {
           // 正確答案
@@ -1624,7 +1655,9 @@
           }
           // 顯示對應英文和星號
           content += ` → <strong>${escapeHtml(option.word)}</strong>`;
-          starBtn = `<button class="option-star-btn" onclick="event.stopPropagation(); starOption(${index})">⭐</button>`;
+          // 如果已記錄，星號亮起
+          const starActiveClass = isOptionRecorded ? ' active' : '';
+          starBtn = `<button class="option-star-btn${starActiveClass}" onclick="event.stopPropagation(); starOption(${index})">⭐</button>`;
         }
 
         return `
@@ -1650,7 +1683,13 @@
     async function starOption(optionIndex) {
       const option = currentQuiz.options[optionIndex];
 
-      // 檢查是否已標記
+      // 檢查是否已經在紀錄中
+      if (recordedWords.has(option.word.toLowerCase())) {
+        showToast('此單字已經標記過了');
+        return;
+      }
+
+      // 檢查本次是否已標記
       if (starredOptions.has(optionIndex)) {
         showToast('已經標記過了');
         return;
@@ -1667,13 +1706,20 @@
 
         if (result.success) {
           starredOptions.add(optionIndex);
-          // 更新星號按鈕樣式
-          const starBtns = document.querySelectorAll('.option-star-btn');
-          starBtns.forEach((btn, idx) => {
-            if (idx === optionIndex - (currentQuiz.options[0].isCorrect ? 1 : 0)) {
-              btn.classList.add('active');
+          // 同時更新本地的 recordedWords
+          recordedWords.add(option.word.toLowerCase());
+          // 更新星號按鈕樣式：計算正確的星號按鈕索引
+          // 星號按鈕只出現在非正確答案的選項上，所以要計算在 optionIndex 之前有多少個非正確答案
+          let starBtnIndex = 0;
+          for (let i = 0; i < optionIndex; i++) {
+            if (!currentQuiz.options[i].isCorrect) {
+              starBtnIndex++;
             }
-          });
+          }
+          const starBtns = document.querySelectorAll('.option-star-btn');
+          if (starBtns[starBtnIndex]) {
+            starBtns[starBtnIndex].classList.add('active');
+          }
           showToast('已標記並儲存');
         } else {
           showToast('儲存失敗');
