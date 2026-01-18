@@ -931,16 +931,15 @@
         url.searchParams.set(key, params[key]);
       });
 
-      const response = await fetch(url.toString(), {
-        method: 'GET',
-        redirect: 'follow'
-      });
+      const response = await fetch(url.toString());
 
-      if (!response.ok) {
-        throw new Error('網路請求失敗');
+      const text = await response.text();
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        console.error('API 回應:', text);
+        throw new Error('回應格式錯誤');
       }
-
-      return await response.json();
     }
 
     async function apiPost(action, data = {}) {
@@ -950,18 +949,16 @@
 
       const response = await fetch(apiUrl, {
         method: 'POST',
-        redirect: 'follow',
-        headers: {
-          'Content-Type': 'text/plain'
-        },
         body: JSON.stringify({ action, ...data })
       });
 
-      if (!response.ok) {
-        throw new Error('網路請求失敗');
+      const text = await response.text();
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        console.error('API 回應:', text);
+        throw new Error('回應格式錯誤');
       }
-
-      return await response.json();
     }
 
     // ============================================
@@ -1003,16 +1000,16 @@
         const testUrl = new URL(url);
         testUrl.searchParams.set('action', 'ping');
 
-        const response = await fetch(testUrl.toString(), {
-          method: 'GET',
-          redirect: 'follow'
-        });
+        const response = await fetch(testUrl.toString());
+        const text = await response.text();
 
-        if (!response.ok) {
-          throw new Error('連線失敗');
+        let result;
+        try {
+          result = JSON.parse(text);
+        } catch (e) {
+          console.error('API 回應:', text);
+          throw new Error('回應格式錯誤，請確認 URL 是否正確');
         }
-
-        const result = await response.json();
 
         if (result.success) {
           setConnectionStatus('connected', '已連線');
