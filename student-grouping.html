@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>學生分組系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            font-family: 'Noto Sans TC', sans-serif;
+        }
+
+        .seat {
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+
+        .seat:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .seat.active {
+            background-color: #22c55e;
+        }
+
+        .seat.inactive {
+            background-color: #ef4444;
+        }
+
+        .seat.leader {
+            position: relative;
+        }
+
+        .seat.leader::after {
+            content: '㊗️';
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            font-size: 14px;
+        }
+
+        .leader-mode-active {
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+            50% { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
+        }
+
+        .group-card {
+            display: flex;
+            flex-direction: column;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .group-label {
+            background-color: #3b82f6;
+            color: white;
+            padding: 10px 16px;
+            font-weight: 700;
+            text-align: center;
+            font-size: 15px;
+        }
+
+        .group-members {
+            display: flex;
+            flex-wrap: wrap;
+            padding: 12px;
+            gap: 8px;
+            background-color: #f8fafc;
+            flex: 1;
+            align-items: flex-start;
+            align-content: flex-start;
+        }
+
+        .member {
+            padding: 6px 12px;
+            background-color: white;
+            border-radius: 20px;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 14px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .member.is-leader {
+            background-color: #fef3c7;
+            border: 1px solid #f59e0b;
+        }
+
+        .results-container {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+        }
+
+        @media (max-width: 768px) {
+            .results-container {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        /* 實驗室座位圖樣式 */
+        .lab-layout {
+            display: flex;
+            flex-direction: column;
+            gap: 32px;
+            align-items: center;
+        }
+
+        .teacher-desk {
+            background-color: #a5b4fc;
+            padding: 12px 60px;
+            border-radius: 4px;
+            font-weight: bold;
+            color: #1e3a8a;
+        }
+
+        .lab-row {
+            display: flex;
+            gap: 24px;
+            justify-content: center;
+            flex-wrap: nowrap;
+        }
+
+        .lab-bench {
+            display: flex;
+            align-items: stretch;
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 8px;
+            min-width: 140px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .lab-bench.empty {
+            opacity: 0.4;
+            background-color: #f1f5f9;
+        }
+
+        .bench-seats-left, .bench-seats-right {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .bench-label {
+            background-color: #3b82f6;
+            color: white;
+            padding: 8px 12px;
+            font-weight: bold;
+            font-size: 24px;
+            border-radius: 4px;
+            margin: 0 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 60px;
+        }
+
+        .lab-bench.empty .bench-label {
+            background-color: #94a3b8;
+        }
+
+        .bench-seat {
+            padding: 6px 10px;
+            background-color: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            font-weight: 500;
+            min-width: 40px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .bench-seat.is-leader {
+            background-color: #fef3c7;
+            border-color: #f59e0b;
+        }
+
+        .bench-seat.empty-seat {
+            visibility: hidden;
+        }
+
+        .extra-groups-notice {
+            margin-top: 16px;
+            padding: 12px 20px;
+            background-color: #fef3c7;
+            border: 1px solid #f59e0b;
+            border-radius: 8px;
+            color: #92400e;
+            font-weight: 500;
+        }
+
+        .extra-groups-container {
+            margin-top: 24px;
+        }
+
+        .extra-groups-container h3 {
+            font-weight: bold;
+            margin-bottom: 12px;
+            color: #374151;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 14px;
+        }
+
+        .legend-box {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-6">
+    <div class="max-w-5xl mx-auto">
+        <!-- 標題 -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h1 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                📚 學生分組系統
+            </h1>
+        </div>
+
+        <!-- 設定區 -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="flex flex-wrap items-center gap-4 mb-4">
+                <div class="flex items-center gap-2">
+                    <label class="font-medium text-gray-700">組數:</label>
+                    <input type="number" id="groupCount" min="1" max="50" value="8"
+                           class="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div class="flex items-center gap-2">
+                    <label class="font-medium text-gray-700">每組人數:</label>
+                    <input type="text" id="groupSize" placeholder="如: 4 或 3-5"
+                           class="w-28 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+            </div>
+            <div class="flex flex-wrap gap-3">
+                <button id="leaderModeBtn" onclick="toggleLeaderMode()"
+                        class="px-4 py-2 bg-amber-500 text-white rounded-lg font-medium hover:bg-amber-600 transition-colors">
+                    選組長模式
+                </button>
+                <button onclick="randomizeGroups()"
+                        class="px-4 py-2 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-colors">
+                    開始分組
+                </button>
+                <button onclick="resetAll()"
+                        class="px-4 py-2 bg-gray-500 text-white rounded-lg font-medium hover:bg-gray-600 transition-colors">
+                    重置
+                </button>
+            </div>
+        </div>
+
+        <!-- 座位表 -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-lg font-bold text-gray-800 mb-4">座位表</h2>
+            <div id="seatChart" class="grid grid-cols-10 gap-2 mb-4">
+                <!-- 座位會由 JavaScript 生成 -->
+            </div>
+
+            <!-- 圖例 -->
+            <div class="flex flex-wrap gap-6 pt-4 border-t border-gray-200">
+                <div class="legend-item">
+                    <div class="legend-box bg-green-500"></div>
+                    <span>參與分組</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-box bg-red-500"></div>
+                    <span>不參與</span>
+                </div>
+                <div class="legend-item">
+                    <span>㊗️</span>
+                    <span>組長</span>
+                </div>
+            </div>
+
+            <!-- 統計資訊 -->
+            <div id="statsInfo" class="mt-4 text-sm text-gray-600">
+                <!-- 統計資訊會由 JavaScript 更新 -->
+            </div>
+        </div>
+
+        <!-- 分組結果 -->
+        <div id="resultsSection" class="bg-white rounded-lg shadow-md p-6 hidden">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-bold text-gray-800">分組結果</h2>
+                <button onclick="downloadResultsImage()"
+                        class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-medium">
+                    下載圖片
+                </button>
+            </div>
+            <div id="resultsContainer" class="results-container">
+                <!-- 結果會由 JavaScript 生成 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 狀態管理
+        const state = {
+            students: [],
+            settings: {
+                groupCount: 8,
+                groupSize: null,
+                leaderMode: false
+            },
+            groups: []
+        };
+
+        // 初始化學生資料
+        function initStudents() {
+            state.students = [];
+            for (let i = 1; i <= 50; i++) {
+                state.students.push({
+                    id: i,
+                    active: true,
+                    isLeader: false
+                });
+            }
+        }
+
+        // 切換學生參與狀態
+        function toggleStudent(id) {
+            const student = state.students.find(s => s.id === id);
+            if (!student) return;
+
+            if (state.settings.leaderMode) {
+                // 組長模式：只有參與的學生可以設為組長
+                if (student.active) {
+                    student.isLeader = !student.isLeader;
+                }
+            } else {
+                // 一般模式：切換參與狀態
+                student.active = !student.active;
+                // 如果設為不參與，取消組長身份
+                if (!student.active) {
+                    student.isLeader = false;
+                }
+            }
+
+            renderSeatChart();
+            updateStats();
+        }
+
+        // 切換組長選擇模式
+        function toggleLeaderMode() {
+            state.settings.leaderMode = !state.settings.leaderMode;
+            const btn = document.getElementById('leaderModeBtn');
+
+            if (state.settings.leaderMode) {
+                btn.classList.add('leader-mode-active', 'ring-2', 'ring-amber-300');
+                btn.textContent = '退出組長模式';
+            } else {
+                btn.classList.remove('leader-mode-active', 'ring-2', 'ring-amber-300');
+                btn.textContent = '選組長模式';
+            }
+
+            renderSeatChart();
+        }
+
+        // 解析人數輸入
+        function parseGroupSize(input) {
+            if (!input || input.trim() === '') return null;
+
+            const trimmed = input.trim();
+
+            // 檢查是否為區間格式 (如 3-5)
+            if (trimmed.includes('-')) {
+                const parts = trimmed.split('-');
+                if (parts.length === 2) {
+                    const min = parseInt(parts[0]);
+                    const max = parseInt(parts[1]);
+                    if (!isNaN(min) && !isNaN(max) && min <= max) {
+                        return { min, max };
+                    }
+                }
+            }
+
+            // 單一數字
+            const num = parseInt(trimmed);
+            if (!isNaN(num) && num > 0) {
+                return num;
+            }
+
+            return null;
+        }
+
+        // Fisher-Yates 洗牌演算法
+        function shuffle(array) {
+            const arr = [...array];
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        }
+
+        // 執行分組
+        function randomizeGroups() {
+            // 取得設定
+            const groupCountInput = document.getElementById('groupCount').value;
+            const groupSizeInput = document.getElementById('groupSize').value;
+
+            const groupCount = parseInt(groupCountInput) || 8;
+            const groupSize = parseGroupSize(groupSizeInput);
+
+            // 收集參與的學生
+            const activeStudents = state.students.filter(s => s.active);
+            const leaders = activeStudents.filter(s => s.isLeader);
+            const nonLeaders = activeStudents.filter(s => !s.isLeader);
+
+            if (activeStudents.length === 0) {
+                alert('請至少選擇一位學生參與分組！');
+                return;
+            }
+
+            if (groupCount > activeStudents.length) {
+                alert('組數不能大於參與人數！');
+                return;
+            }
+
+            // 初始化分組
+            state.groups = [];
+            for (let i = 0; i < groupCount; i++) {
+                state.groups.push({
+                    id: i + 1,
+                    members: [],
+                    leaderId: null
+                });
+            }
+
+            // 打亂組別順序索引，用於隨機分配組長
+            const shuffledGroupIndices = shuffle([...Array(groupCount).keys()]);
+
+            // 分配組長到隨機組別
+            const shuffledLeaders = shuffle(leaders);
+            for (let i = 0; i < Math.min(shuffledLeaders.length, groupCount); i++) {
+                const targetGroupIdx = shuffledGroupIndices[i];
+                state.groups[targetGroupIdx].members.push(shuffledLeaders[i]);
+                state.groups[targetGroupIdx].leaderId = shuffledLeaders[i].id;
+            }
+
+            // 洗牌非組長學生
+            const shuffledNonLeaders = shuffle(nonLeaders);
+
+            // 如果組長數量少於組數，需要從非組長中選出組長
+            const groupsNeedingLeaders = state.groups.filter(g => g.leaderId === null);
+            // 打亂需要組長的組別順序
+            const shuffledGroupsNeedingLeaders = shuffle(groupsNeedingLeaders);
+            for (const group of shuffledGroupsNeedingLeaders) {
+                if (shuffledNonLeaders.length > 0) {
+                    const newLeader = shuffledNonLeaders.shift();
+                    group.members.push(newLeader);
+                    group.leaderId = newLeader.id;
+                }
+            }
+
+            // 隨機分配剩餘學生（不使用 round-robin）
+            // 策略：每次隨機選擇一個人數最少的組
+            for (const student of shuffledNonLeaders) {
+                // 找出目前人數最少的組
+                const minMembers = Math.min(...state.groups.map(g => g.members.length));
+                // 找出所有人數最少的組
+                const smallestGroups = state.groups.filter(g => g.members.length === minMembers);
+                // 隨機選擇其中一個
+                const targetGroup = smallestGroups[Math.floor(Math.random() * smallestGroups.length)];
+                targetGroup.members.push(student);
+            }
+
+            // 最後打亂組別在陣列中的順序
+            state.groups = shuffle(state.groups);
+
+            // 重新編號組別 ID（保持 1, 2, 3... 的順序）
+            state.groups.forEach((group, index) => {
+                group.id = index + 1;
+            });
+
+            // 渲染結果
+            renderResults();
+        }
+
+        // 渲染座位表
+        function renderSeatChart() {
+            const container = document.getElementById('seatChart');
+            container.innerHTML = '';
+
+            for (const student of state.students) {
+                const seat = document.createElement('div');
+                seat.className = `seat w-12 h-12 flex items-center justify-center rounded-lg cursor-pointer font-bold text-white ${student.active ? 'active' : 'inactive'}`;
+
+                if (student.isLeader) {
+                    seat.classList.add('leader');
+                }
+
+                if (state.settings.leaderMode && student.active) {
+                    seat.classList.add('ring-2', 'ring-amber-400');
+                }
+
+                seat.textContent = String(student.id).padStart(2, '0');
+                seat.onclick = () => toggleStudent(student.id);
+
+                container.appendChild(seat);
+            }
+        }
+
+        // 更新統計資訊
+        function updateStats() {
+            const activeCount = state.students.filter(s => s.active).length;
+            const leaderCount = state.students.filter(s => s.isLeader).length;
+
+            const statsDiv = document.getElementById('statsInfo');
+            statsDiv.innerHTML = `
+                <span class="mr-4">參與人數: <strong class="text-green-600">${activeCount}</strong> 人</span>
+                <span>已選組長: <strong class="text-amber-600">${leaderCount}</strong> 人</span>
+            `;
+        }
+
+        // 建立實驗桌元素
+        function createLabBench(group) {
+            const bench = document.createElement('div');
+            bench.className = 'lab-bench';
+            bench.dataset.group = group ? group.id : '';
+
+            if (!group) {
+                bench.classList.add('empty');
+            }
+
+            // 左側座位
+            const leftSeats = document.createElement('div');
+            leftSeats.className = 'bench-seats-left';
+
+            // 組別標籤
+            const label = document.createElement('div');
+            label.className = 'bench-label';
+            label.textContent = group ? group.id : '-';
+
+            // 右側座位
+            const rightSeats = document.createElement('div');
+            rightSeats.className = 'bench-seats-right';
+
+            if (group && group.members.length > 0) {
+                // 排序：組長優先，其餘按座號
+                const sortedMembers = [...group.members].sort((a, b) => {
+                    if (a.id === group.leaderId) return -1;
+                    if (b.id === group.leaderId) return 1;
+                    return a.id - b.id;
+                });
+
+                // 交叉分配座位：右→左→右→左...，使左右平衡
+                // 偶數索引（0, 2, 4）→ 右側
+                // 奇數索引（1, 3, 5）→ 左側
+                const rightMembers = sortedMembers.filter((_, i) => i % 2 === 0);
+                const leftMembers = sortedMembers.filter((_, i) => i % 2 === 1);
+
+                const maxSeatsPerSide = 3;
+                for (let i = 0; i < maxSeatsPerSide; i++) {
+                    // 左側座位
+                    const leftSeat = document.createElement('div');
+                    leftSeat.className = 'bench-seat';
+                    if (i < leftMembers.length) {
+                        const member = leftMembers[i];
+                        if (member.id === group.leaderId) {
+                            leftSeat.classList.add('is-leader');
+                            leftSeat.innerHTML = `㊗️ ${String(member.id).padStart(2, '0')}`;
+                        } else {
+                            leftSeat.textContent = String(member.id).padStart(2, '0');
+                        }
+                    } else {
+                        leftSeat.classList.add('empty-seat');
+                        leftSeat.textContent = '--';
+                    }
+                    leftSeats.appendChild(leftSeat);
+
+                    // 右側座位
+                    const rightSeat = document.createElement('div');
+                    rightSeat.className = 'bench-seat';
+                    if (i < rightMembers.length) {
+                        const member = rightMembers[i];
+                        if (member.id === group.leaderId) {
+                            rightSeat.classList.add('is-leader');
+                            rightSeat.innerHTML = `㊗️ ${String(member.id).padStart(2, '0')}`;
+                        } else {
+                            rightSeat.textContent = String(member.id).padStart(2, '0');
+                        }
+                    } else {
+                        rightSeat.classList.add('empty-seat');
+                        rightSeat.textContent = '--';
+                    }
+                    rightSeats.appendChild(rightSeat);
+                }
+            } else {
+                // 空桌：顯示空座位
+                for (let i = 0; i < 3; i++) {
+                    const leftSeat = document.createElement('div');
+                    leftSeat.className = 'bench-seat empty-seat';
+                    leftSeat.textContent = '--';
+                    leftSeats.appendChild(leftSeat);
+
+                    const rightSeat = document.createElement('div');
+                    rightSeat.className = 'bench-seat empty-seat';
+                    rightSeat.textContent = '--';
+                    rightSeats.appendChild(rightSeat);
+                }
+            }
+
+            bench.appendChild(leftSeats);
+            bench.appendChild(label);
+            bench.appendChild(rightSeats);
+
+            return bench;
+        }
+
+        // 渲染分組結果
+        function renderResults() {
+            const section = document.getElementById('resultsSection');
+            const container = document.getElementById('resultsContainer');
+
+            section.classList.remove('hidden');
+            container.innerHTML = '';
+
+            // 建立實驗室座位圖
+            const labLayout = document.createElement('div');
+            labLayout.className = 'lab-layout';
+
+            // 講桌
+            const teacherDesk = document.createElement('div');
+            teacherDesk.className = 'teacher-desk';
+            teacherDesk.textContent = '講桌（化學實驗室）';
+            labLayout.appendChild(teacherDesk);
+
+            // 建立組別對照表
+            const groupMap = {};
+            for (const group of state.groups) {
+                groupMap[group.id] = group;
+            }
+
+            // 前排：第4組、第3組、第2組、第1組（由左至右）
+            const frontRow = document.createElement('div');
+            frontRow.className = 'lab-row';
+            [4, 3, 2, 1].forEach(groupId => {
+                frontRow.appendChild(createLabBench(groupMap[groupId] || null));
+            });
+            labLayout.appendChild(frontRow);
+
+            // 後排：第8組、第7組、第6組、第5組（由左至右）
+            const backRow = document.createElement('div');
+            backRow.className = 'lab-row';
+            [8, 7, 6, 5].forEach(groupId => {
+                backRow.appendChild(createLabBench(groupMap[groupId] || null));
+            });
+            labLayout.appendChild(backRow);
+
+            container.appendChild(labLayout);
+
+            // 處理超過 8 組的情況
+            if (state.groups.length > 8) {
+                const extraGroups = state.groups.filter(g => g.id > 8);
+
+                const notice = document.createElement('div');
+                notice.className = 'extra-groups-notice';
+                notice.textContent = `⚠️ 組數超過 8 組，以下第 9 組以後的分組需要另行安排座位`;
+                container.appendChild(notice);
+
+                const extraContainer = document.createElement('div');
+                extraContainer.className = 'extra-groups-container';
+
+                const extraTitle = document.createElement('h3');
+                extraTitle.textContent = '額外分組';
+                extraContainer.appendChild(extraTitle);
+
+                const extraGrid = document.createElement('div');
+                extraGrid.className = 'results-container';
+
+                for (const group of extraGroups) {
+                    const card = document.createElement('div');
+                    card.className = 'group-card';
+
+                    const label = document.createElement('div');
+                    label.className = 'group-label';
+                    label.textContent = `第 ${group.id} 組`;
+
+                    const membersDiv = document.createElement('div');
+                    membersDiv.className = 'group-members';
+
+                    const sortedMembers = [...group.members].sort((a, b) => {
+                        if (a.id === group.leaderId) return -1;
+                        if (b.id === group.leaderId) return 1;
+                        return a.id - b.id;
+                    });
+
+                    for (const member of sortedMembers) {
+                        const memberDiv = document.createElement('div');
+                        memberDiv.className = `member ${member.id === group.leaderId ? 'is-leader' : ''}`;
+
+                        if (member.id === group.leaderId) {
+                            memberDiv.innerHTML = `㊗️ ${String(member.id).padStart(2, '0')}`;
+                        } else {
+                            memberDiv.textContent = String(member.id).padStart(2, '0');
+                        }
+
+                        membersDiv.appendChild(memberDiv);
+                    }
+
+                    card.appendChild(label);
+                    card.appendChild(membersDiv);
+                    extraGrid.appendChild(card);
+                }
+
+                extraContainer.appendChild(extraGrid);
+                container.appendChild(extraContainer);
+            }
+
+            // 滾動到結果區域
+            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // 下載分組結果圖片
+        function downloadResultsImage() {
+            const container = document.getElementById('resultsContainer');
+            html2canvas(container, {
+                backgroundColor: '#ffffff',
+                scale: 2  // 高解析度
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = '分組結果.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            });
+        }
+
+        // 重置
+        function resetAll() {
+            // 重置學生狀態
+            initStudents();
+
+            // 重置設定
+            state.settings.leaderMode = false;
+            state.groups = [];
+
+            // 重置 UI
+            document.getElementById('groupCount').value = 8;
+            document.getElementById('groupSize').value = '';
+
+            const btn = document.getElementById('leaderModeBtn');
+            btn.classList.remove('leader-mode-active', 'ring-2', 'ring-amber-300');
+            btn.textContent = '選組長模式';
+
+            document.getElementById('resultsSection').classList.add('hidden');
+
+            renderSeatChart();
+            updateStats();
+        }
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            initStudents();
+            renderSeatChart();
+            updateStats();
+        });
+    </script>
+</body>
+</html>
